@@ -37,10 +37,21 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 REPO_NAME="$(basename "$REPO_ROOT")"
 WORKTREE_BASE="$(dirname "$REPO_ROOT")"
 
+# Count existing tmux sessions to determine starting number
+SESSION_NUM=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
+
 for BRANCH in "$@"; do
   # Sanitize branch name for filesystem/tmux (replace / with -)
   SAFE_BRANCH="${BRANCH//\//-}"
   WORKTREE_DIR="${WORKTREE_BASE}/${REPO_NAME}-${SAFE_BRANCH}"
+
+  # Derive a short readable name from the branch
+  # e.g. "bugfix/ABBI-1381-pending-icon-position" -> "ABBI-1381 Pending Icon Position"
+  SHORT_NAME=$(echo "$SAFE_BRANCH" \
+    | sed -E 's/^(bugfix|task|feature|hotfix|epic)-//' \
+    | sed -E 's/^([A-Z]+-[0-9]+)-/\1 /' \
+    | sed 's/-/ /g' \
+    | awk '{for(i=1;i<=NF;i++) if(i==1) printf "%s",$i; else printf " %s",toupper(substr($i,1,1)) substr($i,2)}')
 
   # --- Create or reuse worktree ---
   if [ -d "$WORKTREE_DIR" ]; then
@@ -60,11 +71,11 @@ for BRANCH in "$@"; do
   fi
 
   # --- Create tmux session ---
-  SESSION_NAME="${SAFE_BRANCH}"
+  SESSION_NAME="${SESSION_NUM}) ${SHORT_NAME}"
 
-  # Check if session already exists; skip if so
-  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "  tmux session '$SESSION_NAME' already exists, skipping."
+  # Check if a session for this branch already exists (by matching the short name)
+  if tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -qF "$SHORT_NAME"; then
+    echo "  tmux session for '$SHORT_NAME' already exists, skipping."
   else
     echo "  Creating tmux session: $SESSION_NAME"
     # Create session with first window running claude code
@@ -75,6 +86,7 @@ for BRANCH in "$@"; do
     tmux select-window -t "$SESSION_NAME:claude"
   fi
 
+  SESSION_NUM=$((SESSION_NUM + 1))
   echo ""
 done
 
