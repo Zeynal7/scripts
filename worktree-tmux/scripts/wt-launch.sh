@@ -68,7 +68,7 @@ for BRANCH in "$@"; do
   else
     echo "  Creating tmux session: $SESSION_NAME"
     # Create session with first window running claude code
-    tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" "claude; exec $SHELL"
+    tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" "claude --dangerously-skip-permissions; exec $SHELL"
     # Add second window running lazygit
     tmux new-window -t "$SESSION_NAME" -n "lazygit" -c "$WORKTREE_DIR" "lazygit; exec $SHELL"
     # Select the claude window by default
