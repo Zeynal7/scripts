@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wt-launch.sh — Create git worktrees and open tmux windows with claude code + lazygit
+# wt-launch.sh — Create git worktrees and open tmux sessions with claude code + lazygit
 #
 # Usage:
 #   wt-launch.sh <branch1> [branch2] [branch3] ...
@@ -8,9 +8,9 @@
 # Creates worktrees under ../<repo-name>-<branch> relative to the repo root.
 # For each branch:
 #   1. Creates a worktree (or reuses existing) for the branch
-#   2. Creates a tmux window named after the branch
-#   3. Opens claude code in that window
-#   4. Opens a second tmux window named <branch>:lg running lazygit in the worktree
+#   2. Creates a tmux session named after the branch with two windows:
+#      - Window 0: claude code
+#      - Window 1: lazygit
 
 set -euo pipefail
 
@@ -19,17 +19,12 @@ set -euo pipefail
 if [ $# -eq 0 ]; then
   echo "Usage: wt-launch.sh <branch1> [branch2] ..."
   echo ""
-  echo "Creates git worktrees and tmux windows with claude code + lazygit."
+  echo "Creates git worktrees and tmux sessions with claude code + lazygit."
   exit 1
 fi
 
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   echo "Error: not inside a git repository."
-  exit 1
-fi
-
-if [ -z "${TMUX:-}" ]; then
-  echo "Error: not inside a tmux session."
   exit 1
 fi
 
@@ -64,27 +59,25 @@ for BRANCH in "$@"; do
     fi
   fi
 
-  # --- Create tmux windows ---
-  WINDOW_CC="${SAFE_BRANCH}"
-  WINDOW_LG="${SAFE_BRANCH}:lg"
+  # --- Create tmux session ---
+  SESSION_NAME="${SAFE_BRANCH}"
 
-  # Check if windows already exist; skip if so
-  if tmux list-windows -F '#{window_name}' | grep -qx "$WINDOW_CC"; then
-    echo "  tmux window '$WINDOW_CC' already exists, skipping."
+  # Check if session already exists; skip if so
+  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "  tmux session '$SESSION_NAME' already exists, skipping."
   else
-    echo "  Creating tmux window: $WINDOW_CC (claude code)"
-    tmux new-window -n "$WINDOW_CC" -c "$WORKTREE_DIR" "claude; exec $SHELL"
-  fi
-
-  if tmux list-windows -F '#{window_name}' | grep -qx "$WINDOW_LG"; then
-    echo "  tmux window '$WINDOW_LG' already exists, skipping."
-  else
-    echo "  Creating tmux window: $WINDOW_LG (lazygit)"
-    tmux new-window -n "$WINDOW_LG" -c "$WORKTREE_DIR" "lazygit; exec $SHELL"
+    echo "  Creating tmux session: $SESSION_NAME"
+    # Create session with first window running claude code
+    tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" "claude; exec $SHELL"
+    # Add second window running lazygit
+    tmux new-window -t "$SESSION_NAME" -n "lazygit" -c "$WORKTREE_DIR" "lazygit; exec $SHELL"
+    # Select the first window (claude) by default
+    tmux select-window -t "$SESSION_NAME:0"
   fi
 
   echo ""
 done
 
-echo "Done. $(($# * 2)) tmux windows created for $# worktree(s)."
-echo "Switch between them with: <prefix> + w  or  <prefix> + n/p"
+echo "Done. $# tmux session(s) created for $# worktree(s)."
+echo "Switch between sessions with: <prefix> + s"
+echo "Attach to a session with: tmux attach -t <session-name>"
