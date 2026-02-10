@@ -71,8 +71,8 @@ for BRANCH in "$@"; do
     tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" "claude; exec $SHELL"
     # Add second window running lazygit
     tmux new-window -t "$SESSION_NAME" -n "lazygit" -c "$WORKTREE_DIR" "lazygit; exec $SHELL"
-    # Select the first window (claude) by default
-    tmux select-window -t "$SESSION_NAME:0"
+    # Select the claude window by default
+    tmux select-window -t "$SESSION_NAME:claude"
   fi
 
   echo ""
