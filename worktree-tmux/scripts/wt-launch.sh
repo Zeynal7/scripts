@@ -188,6 +188,9 @@ for i in $(seq 0 $((count - 1))); do
       aerospace move-node-to-workspace --window-id "$XCODE_WIN" "$workspace" 2>/dev/null || true
       echo "✓ Moved Xcode ($XCODE_WIN) to workspace $workspace"
 
+      # Focus the workspace and set the scheme for this specific Xcode window
+      aerospace workspace "$workspace" 2>/dev/null
+      sleep 0.5
       osascript -e 'tell application "Xcode" to set the active scheme of the active workspace document to (scheme "IBAMobileBank-Test" of the active workspace document)' 2>/dev/null || true
       echo "✓ Switched to IBAMobileBank-Test scheme"
       break
