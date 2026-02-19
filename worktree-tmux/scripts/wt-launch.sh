@@ -9,8 +9,9 @@
 # For each branch:
 #   1. Creates a worktree (or reuses existing) for the branch
 #   2. Creates a tmux session named after the branch with two windows:
-#      - Window 0: claude code
-#      - Window 1: lazygit
+#      - Window 1 (claude): left pane = claude code, right pane = make (opens Xcode)
+#      - Window 2 (lazygit): lazygit
+#   3. Moves the opened Xcode window to the corresponding aerospace workspace
 
 set -euo pipefail
 
@@ -53,6 +54,12 @@ for BRANCH in "$@"; do
     | sed 's/-/ /g' \
     | awk '{for(i=1;i<=NF;i++) if(i==1) printf "%s",$i; else printf " %s",toupper(substr($i,1,1)) substr($i,2)}')
 
+  # Extract Jira ticket ID from branch (e.g., ABBI-1381 or DCT-46934)
+  JIRA_ID=""
+  if [[ "$BRANCH" =~ ([A-Z]+-[0-9]+) ]]; then
+    JIRA_ID="${BASH_REMATCH[1]}"
+  fi
+
   # --- Create or reuse worktree ---
   if [ -d "$WORKTREE_DIR" ]; then
     echo "► Worktree already exists: $WORKTREE_DIR"
@@ -78,10 +85,35 @@ for BRANCH in "$@"; do
     echo "  tmux session for '$SHORT_NAME' already exists, skipping."
   else
     echo "  Creating tmux session: $SESSION_NAME"
-    # Create session with first window running claude code
-    tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" "claude --dangerously-skip-permissions; exec $SHELL"
+
+    # Create session with first window - claude code with auto-planning prompt
+    CLAUDE_PROMPT="Start planning based on the Jira task ${JIRA_ID}. Read CLAUDE.md for instructions."
+    tmux new-session -d -s "$SESSION_NAME" -n "claude" -c "$WORKTREE_DIR" \
+      "claude --dangerously-skip-permissions -p \"${CLAUDE_PROMPT}\"; exec $SHELL"
+
+    # Split the claude window horizontally (right pane) and run make
+    # After make completes, move the Xcode window to the corresponding workspace
+    # Match by the specific worktree directory name to handle multiple concurrent opens
+    WORKSPACE_NUM="$SESSION_NUM"
+    WORKTREE_NAME="$(basename "$WORKTREE_DIR")"
+    tmux split-window -t "$SESSION_NAME:claude" -h -c "$WORKTREE_DIR" \
+      "make; sleep 3; \
+      XCODE_WIN=\$(aerospace list-windows --all 2>/dev/null | grep -i 'Xcode' | grep -i '${WORKTREE_NAME}' | head -1 | awk '{print \$1}'); \
+      if [ -n \"\$XCODE_WIN\" ]; then \
+        aerospace move-node-to-workspace --window-id \"\$XCODE_WIN\" ${WORKSPACE_NUM} 2>/dev/null || true; \
+        echo \"Moved Xcode to workspace ${WORKSPACE_NUM}\"; \
+        osascript -e 'tell application \"Xcode\" to set the active scheme of the active workspace document to (scheme \"IBAMobileBank-Test\" of the active workspace document)' 2>/dev/null || true; \
+        echo \"Switched to IBAMobileBank-Test scheme\"; \
+      else \
+        echo \"Xcode window not found for ${WORKTREE_NAME}\"; \
+      fi; exec $SHELL"
+
+    # Focus the left pane (claude)
+    tmux select-pane -t "$SESSION_NAME:claude.0"
+
     # Add second window running lazygit
     tmux new-window -t "$SESSION_NAME" -n "lazygit" -c "$WORKTREE_DIR" "lazygit; exec $SHELL"
+
     # Select the claude window by default
     tmux select-window -t "$SESSION_NAME:claude"
   fi
