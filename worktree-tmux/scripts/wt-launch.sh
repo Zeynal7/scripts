@@ -127,7 +127,7 @@ if [ "$BUILD_COUNT" -gt 0 ]; then
   echo ""
   echo "Starting sequential builds in background..."
 
-  # Create build script (bash 3.x compatible)
+  # Create build script (bash 3.x compatible - no arrays)
   BUILD_SCRIPT=$(mktemp)
   cat > "$BUILD_SCRIPT" << 'BUILDEOF'
 #!/bin/bash
@@ -136,23 +136,14 @@ DIRS_STR="$1"
 WORKSPACES_STR="$2"
 SESSIONS_STR="$3"
 
-# Convert to arrays using tr and read (bash 3.x compatible)
-OLD_IFS="$IFS"
-IFS='|'
-set -f
-DIRS=($DIRS_STR)
-WORKSPACES=($WORKSPACES_STR)
-SESSIONS=($SESSIONS_STR)
-set +f
-IFS="$OLD_IFS"
+# Count items (number of delimiters)
+count=$(echo "$DIRS_STR" | tr -cd '|' | wc -c | tr -d ' ')
 
-# Get count (subtract 1 for trailing delimiter)
-count=$((${#DIRS[@]} - 1))
-
-for i in $(seq 0 $((count - 1))); do
-  dir="${DIRS[$i]}"
-  workspace="${WORKSPACES[$i]}"
-  session="${SESSIONS[$i]}"
+for i in $(seq 1 $count); do
+  # Extract i-th field using cut (1-indexed)
+  dir=$(echo "$DIRS_STR" | cut -d'|' -f$i)
+  workspace=$(echo "$WORKSPACES_STR" | cut -d'|' -f$i)
+  session=$(echo "$SESSIONS_STR" | cut -d'|' -f$i)
 
   [ -z "$dir" ] && continue
 
